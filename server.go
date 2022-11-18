@@ -3,16 +3,19 @@ package main
 import (
 	"log"
 	"net/http"
+	"github.com/gorilla/mux"
 )
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("HELLO!"))
+	w.Write([]byte("HELLO AGAIN!"))
 }
 
 func main() {
 
-	http.HandleFunc("/", indexHandler)
+	router := mux.NewRouter()
 
-	log.Fatal(http.ListenAndServe("localhost:5555", nil))
+	router.HandleFunc("/", indexHandler)
+
+	log.Fatal(http.ListenAndServe("localhost:5555", router))
 
 }

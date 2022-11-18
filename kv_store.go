@@ -4,7 +4,7 @@ import "errors"
 
 var store = make(map[string]string)
 
-var ErrorKeyNotFound = errors.New("Key not found")
+var ErrorKeyNotFound = errors.New("key not found")
 
 // will overwrite existing value
 func Put(key, value string) error {
