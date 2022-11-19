@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"errors"
@@ -39,4 +39,8 @@ func Delete(key string) error {
 
 	delete(store.data, key)
 	return nil
+}
+
+func GetAll() map[string]string {
+	return store.data
 }

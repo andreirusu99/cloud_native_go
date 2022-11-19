@@ -1,10 +1,12 @@
-package main
+package service
 
 import (
+	store "cloud_native_go/pkg/db"
+	"cloud_native_go/pkg/log"
+	"cloud_native_go/pkg/misc"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -30,7 +32,7 @@ func keyValuePutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// store value and handle possible errors
-	if err = Put(key, string(value)); err != nil {
+	if err = store.Put(key, string(value)); err != nil {
 		http.Error(w,
 			err.Error(),
 			http.StatusInternalServerError,
@@ -39,18 +41,19 @@ func keyValuePutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// no errors so far => Success
+	logger.LogPut(key, string(value))
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(fmt.Sprintf("Stored value \"%s\" to key \"%s\"", value, key)))
 }
 
 func keyValueGetHandler(w http.ResponseWriter, r *http.Request) {
 	key := mux.Vars(r)["key"]
-	value, err := Get(key)
+	value, err := store.Get(key)
 
 	// key not found
-	if errors.Is(err, ErrorKeyNotFound) {
+	if errors.Is(err, store.ErrorKeyNotFound) {
 		http.Error(w,
-			err.Error() + ": " + key,
+			err.Error()+": "+key,
 			http.StatusNotFound,
 		)
 		return
@@ -70,7 +73,7 @@ func keyValueGetHandler(w http.ResponseWriter, r *http.Request) {
 
 func keyDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	key := mux.Vars(r)["key"]
-	if err := Delete(key); err != nil {
+	if err := store.Delete(key); err != nil {
 		http.Error(w,
 			err.Error(),
 			http.StatusInternalServerError,
@@ -78,28 +81,57 @@ func keyDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	Delete(key)
+	logger.LogDelete(key)
 	w.Write([]byte(fmt.Sprintf("Key \"%s\" was deleted if present", key)))
-
 }
 
-func setupRoutes(router *mux.Router) {
+func SetupRoutes(router *mux.Router) {
 	router.HandleFunc("/", indexHandler)
 	router.HandleFunc("/v1/{key}", keyValuePutHandler).Methods("PUT")
 	router.HandleFunc("/v1/{key}", keyValueGetHandler).Methods("GET")
 	router.HandleFunc("/v1/{key}", keyDeleteHandler).Methods("DELETE")
 }
 
-func main() {
-	fmt.Println("Server started")
+var logger log.TransactionLogger
 
-	router := mux.NewRouter()
+func SetupLogger(path string) error {
+	var err error
 
-	setupRoutes(router)
+	fmt.Println("-> Creating File Transaction Logger...")
+	logger, err = log.NewFileTransactionLogger(path)
+	fmt.Println("-> Done creating File Transaction Logger")
 
-	fmt.Println("Routes initialised")
-	fmt.Println("Listening...")
+	if err != nil {
+		return fmt.Errorf("failed to create transaction logger: %w", err)
+	}
 
-	log.Fatal(http.ListenAndServe("localhost:5555", router))
+	fmt.Println("-> Replaying Logs...")
+	events, errors := logger.ReplayEvents()
 
+	event, ok := misc.Event{}, true
+	for ok && err == nil{
+		select {
+		case err, ok = <-errors: // got an error
+			fmt.Println(fmt.Errorf("error: %w", err))
+
+		case event, ok = <-events: // got an event
+
+			switch event.Type{
+			case misc.EventPut:
+				err = store.Put(event.Key, event.Value)
+
+			case misc.EventDelete:
+				err = store.Delete(event.Key)
+			}
+		}
+	}
+
+	fmt.Printf("-> Recreated DataStore: %v\n", store.GetAll())
+	fmt.Println("-> Done replaying Logs")
+
+	fmt.Println("-> Starting the Logger...")
+	logger.Run()
+	fmt.Println("-> Done starting the Logger")
+
+	return err
 }
