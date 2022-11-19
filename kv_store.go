@@ -1,28 +1,42 @@
 package main
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
-var store = make(map[string]string)
+var store = struct {
+	sync.RWMutex
+	data map[string]string
+}{data: make(map[string]string)}
 
 var ErrorKeyNotFound = errors.New("key not found")
 
-// will overwrite existing value
 func Put(key, value string) error {
-	store[key] = value
+	store.Lock()
+	defer store.Unlock()
+
+	store.data[key] = value
 	return nil
 }
 
 func Get(key string) (string, error) {
-	value, exists := store[key]
+	store.RLock()
+	defer store.RUnlock()
+
+	value, exists := store.data[key]
 
 	if !exists {
-		return "", ErrorKeyNotFound // "" is the zero value for string
+		return "", ErrorKeyNotFound
 	}
 
 	return value, nil
 }
 
 func Delete(key string) error {
-	delete(store, key)
+	store.Lock()
+	defer store.Unlock()
+
+	delete(store.data, key)
 	return nil
 }
