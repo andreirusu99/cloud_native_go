@@ -8,13 +8,13 @@ import (
 )
 
 var outFormatString = "%d\t%d\t%s\t%s\n" // index - type - key - value
-var inFormatString = "%d\t%d\t%s\t%s" // index - type - key - value
+var inFormatString = "%d\t%d\t%s\t%s"    // index - type - key - value
 
 type FileTransactionLogger struct {
-	events 		chan<- misc.Event
-	errors 		<-chan error
-	lastIndex 	uint64
-	file 		*os.File
+	events    chan<- misc.Event
+	errors    <-chan error
+	lastIndex uint64
+	file      *os.File
 }
 
 // constructor
@@ -49,7 +49,7 @@ func (l *FileTransactionLogger) Run() {
 	l.errors = errors
 
 	// goroutine to consume the events channel
-	go func () {
+	go func() {
 		for event := range events {
 
 			// increment index
@@ -70,13 +70,12 @@ func (l *FileTransactionLogger) Run() {
 	}()
 }
 
-
-func (l *FileTransactionLogger) ReplayEvents() (<-chan misc.Event, <-chan error){
+func (l *FileTransactionLogger) ReplayEvents() (<-chan misc.Event, <-chan error) {
 	scanner := bufio.NewScanner(l.file)
 	events := make(chan misc.Event)
 	errors := make(chan error, 1)
 
-	go func () {
+	go func() {
 
 		var event misc.Event
 		defer func() {
@@ -99,7 +98,7 @@ func (l *FileTransactionLogger) ReplayEvents() (<-chan misc.Event, <-chan error)
 			}
 
 			l.lastIndex = event.Index // update the highest index
-			events <- event // push (stream) the event on the channel
+			events <- event           // push (stream) the event on the channel
 		}
 
 		if err := scanner.Err(); err != nil {

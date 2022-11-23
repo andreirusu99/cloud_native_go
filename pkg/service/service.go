@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cloud_native_go/pkg/config"
 	store "cloud_native_go/pkg/db"
 	"cloud_native_go/pkg/log"
 	"cloud_native_go/pkg/misc"
@@ -43,7 +44,12 @@ func keyValuePutHandler(w http.ResponseWriter, r *http.Request) {
 	// no errors so far => Success
 	logger.LogPut(key, string(value))
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(fmt.Sprintf("Stored value \"%s\" to key \"%s\"", value, key)))
+	_, err = w.Write([]byte(fmt.Sprintf("Stored value \"%s\" to key \"%s\"", value, key)))
+	if err != nil {
+		return
+	}
+
+	fmt.Printf("Handled PUT request: %s @ %s\n", key, value)
 }
 
 func keyValueGetHandler(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +74,12 @@ func keyValueGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Write([]byte(fmt.Sprintf("Key \"%s\" contains value \"%s\"", key, value)))
+	_, err = w.Write([]byte(fmt.Sprintf("Key \"%s\" contains value \"%s\"", key, value)))
+	if err != nil {
+		return
+	}
+
+	fmt.Printf("Handled GET request: %s\n", key)
 }
 
 func keyDeleteHandler(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +93,11 @@ func keyDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.LogDelete(key)
-	w.Write([]byte(fmt.Sprintf("Key \"%s\" was deleted if present", key)))
+	_, err := w.Write([]byte(fmt.Sprintf("Key \"%s\" was deleted if present", key)))
+	if err != nil {
+		return
+	}
+	fmt.Printf("Handled DELETE request: %s\n", key)
 }
 
 func SetupRoutes(router *mux.Router) {
@@ -94,29 +109,29 @@ func SetupRoutes(router *mux.Router) {
 
 var logger log.TransactionLogger
 
-func SetupLogger(path string) error {
+func SetupLogger() error {
 	var err error
 
-	fmt.Println("-> Creating File Transaction Logger...")
-	logger, err = log.NewFileTransactionLogger(path)
-	fmt.Println("-> Done creating File Transaction Logger")
+	fmt.Println("-> Creating Transaction Logger...")
+	logger, err = log.NewPostgresTransactionLogger(config.PostgresConfig)
 
 	if err != nil {
 		return fmt.Errorf("failed to create transaction logger: %w", err)
 	}
+	fmt.Println("-> Done creating Transaction Logger")
 
 	fmt.Println("-> Replaying Logs...")
-	events, errors := logger.ReplayEvents()
+	events, replayErrors := logger.ReplayEvents()
 
 	event, ok := misc.Event{}, true
-	for ok && err == nil{
+	for ok && err == nil {
 		select {
-		case err, ok = <-errors: // got an error
-			fmt.Println(fmt.Errorf("error: %w", err))
+		case err, ok = <-replayErrors: // got an error
+			return fmt.Errorf("error replaying logs: %w", err)
 
 		case event, ok = <-events: // got an event
 
-			switch event.Type{
+			switch event.Type {
 			case misc.EventPut:
 				err = store.Put(event.Key, event.Value)
 
@@ -132,6 +147,12 @@ func SetupLogger(path string) error {
 	fmt.Println("-> Starting the Logger...")
 	logger.Run()
 	fmt.Println("-> Done starting the Logger")
+
+	go func() {
+		for err = range logger.Err() {
+			fmt.Printf("logger error: %v", err)
+		}
+	}()
 
 	return err
 }
