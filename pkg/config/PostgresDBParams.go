@@ -9,7 +9,7 @@ type PostgresDBParams struct {
 }
 
 var PostgresConfig = PostgresDBParams{
-	Host:    "localhost",
+	Host:    "host.docker.internal",
 	Port:    5432,
 	DB_name: "kvs",
 	User:    "postgres",
