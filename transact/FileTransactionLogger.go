@@ -1,8 +1,8 @@
-package log
+package transact
 
 import (
 	"bufio"
-	"cloud_native_go/pkg/misc"
+	"cloud_native_go/core"
 	"fmt"
 	"os"
 )
@@ -11,14 +11,14 @@ var outFormatString = "%d\t%d\t%s\t%s\n" // index - type - key - value
 var inFormatString = "%d\t%d\t%s\t%s"    // index - type - key - value
 
 type FileTransactionLogger struct {
-	events    chan<- misc.Event
+	events    chan<- core.Event
 	errors    <-chan error
 	lastIndex uint64
 	file      *os.File
 }
 
 // constructor
-func NewFileTransactionLogger(path string) (TransactionLogger, error) {
+func NewFileTransactionLogger(path string) (core.TransactionLogger, error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0755)
 	if err != nil {
 		return nil, fmt.Errorf("transaction log file could not be opened: %w", err)
@@ -29,11 +29,11 @@ func NewFileTransactionLogger(path string) (TransactionLogger, error) {
 
 // put events on a channel to be processed by a goroutine
 func (l *FileTransactionLogger) LogPut(key, value string) {
-	l.events <- misc.Event{Type: misc.EventPut, Key: key, Value: value}
+	l.events <- core.Event{Type: core.EventPut, Key: key, Value: value}
 }
 
 func (l *FileTransactionLogger) LogDelete(key string) {
-	l.events <- misc.Event{Type: misc.EventDelete, Key: key}
+	l.events <- core.Event{Type: core.EventDelete, Key: key}
 }
 
 func (l *FileTransactionLogger) Err() <-chan error {
@@ -42,7 +42,7 @@ func (l *FileTransactionLogger) Err() <-chan error {
 
 func (l *FileTransactionLogger) Run() {
 	// create the event and error channels
-	events := make(chan misc.Event, 16)
+	events := make(chan core.Event, 16)
 	l.events = events
 
 	errors := make(chan error, 1)
@@ -70,14 +70,14 @@ func (l *FileTransactionLogger) Run() {
 	}()
 }
 
-func (l *FileTransactionLogger) ReplayEvents() (<-chan misc.Event, <-chan error) {
+func (l *FileTransactionLogger) ReplayEvents() (<-chan core.Event, <-chan error) {
 	scanner := bufio.NewScanner(l.file)
-	events := make(chan misc.Event)
+	events := make(chan core.Event)
 	errors := make(chan error, 1)
 
 	go func() {
 
-		var event misc.Event
+		var event core.Event
 		defer func() {
 			close(events)
 			close(errors)

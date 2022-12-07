@@ -1,20 +1,27 @@
-package log
+package transact
 
 import (
-	"cloud_native_go/pkg/config"
-	"cloud_native_go/pkg/misc"
+	"cloud_native_go/core"
 	"database/sql"
 	"fmt"
 	_ "github.com/lib/pq"
 )
 
 type PostgresTransactionLogger struct {
-	events chan<- misc.Event
+	events chan<- core.Event
 	errors <-chan error
 	db     *sql.DB
 }
 
-func NewPostgresTransactionLogger(config config.PostgresDBParams) (TransactionLogger, error) {
+type PostgresDBParams struct {
+	Host    string
+	Port    int
+	DB_name string
+	User    string
+	Pass    string
+}
+
+func NewPostgresTransactionLogger(config PostgresDBParams) (core.TransactionLogger, error) {
 
 	db, err := sql.Open("postgres", fmt.Sprintf(
 		"host=%s port=%d dbname=%s user=%s password=%s sslmode=disable",
@@ -62,11 +69,11 @@ func (l *PostgresTransactionLogger) verifyTableExists() (bool, error) {
 }
 
 func (l *PostgresTransactionLogger) LogPut(key, value string) {
-	l.events <- misc.Event{Type: misc.EventPut, Key: key, Value: value}
+	l.events <- core.Event{Type: core.EventPut, Key: key, Value: value}
 }
 
 func (l *PostgresTransactionLogger) LogDelete(key string) {
-	l.events <- misc.Event{Type: misc.EventDelete, Key: key}
+	l.events <- core.Event{Type: core.EventDelete, Key: key}
 }
 
 func (l *PostgresTransactionLogger) Err() <-chan error {
@@ -74,7 +81,7 @@ func (l *PostgresTransactionLogger) Err() <-chan error {
 }
 
 func (l *PostgresTransactionLogger) Run() {
-	events := make(chan misc.Event, 16)
+	events := make(chan core.Event, 16)
 	l.events = events
 
 	errors := make(chan error, 1)
@@ -95,9 +102,9 @@ func (l *PostgresTransactionLogger) Run() {
 	}()
 }
 
-func (l *PostgresTransactionLogger) ReplayEvents() (<-chan misc.Event, <-chan error) {
-	events := make(chan misc.Event)
-	errors := make(chan error)
+func (l *PostgresTransactionLogger) ReplayEvents() (<-chan core.Event, <-chan error) {
+	events := make(chan core.Event)
+	errors := make(chan error, 1)
 
 	go func() {
 		defer func() {
@@ -117,7 +124,7 @@ func (l *PostgresTransactionLogger) ReplayEvents() (<-chan misc.Event, <-chan er
 
 		defer rows.Close()
 
-		event := misc.Event{}
+		event := core.Event{}
 
 		for rows.Next() {
 			if err = rows.Scan(&event.Index, &event.Type, &event.Key, &event.Value); err != nil {

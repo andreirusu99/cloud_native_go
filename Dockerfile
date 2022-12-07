@@ -1,7 +1,7 @@
 FROM golang:1.19 as build_stage
 
 COPY . /src
-WORKDIR /src/cmd/main
+WORKDIR /src
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app
 
